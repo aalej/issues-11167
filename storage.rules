@@ -1,0 +1,12 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{userId}/{allPaths=**} {
+      allow read: if 
+        firestore.exists(/databases/(default)/documents/users/$(userId)) 
+        && (firestore.get(/databases/(default)/documents/user-levels/$(userId)).data.user_level >= 50
+        || firestore.get(/databases/(default)/documents/user-status/$(userId)).data.is_active == true);
+      allow write: if true;
+    }
+  }
+}

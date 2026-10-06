@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test for 11167</title>
+
+  <!-- Firebase Compat SDK -->
+  <script defer src="/__/firebase/12.19.0/firebase-app-compat.js"></script>
+  <script defer src="/__/firebase/12.19.0/firebase-firestore-compat.js"></script>
+  <script defer src="/__/firebase/12.19.0/firebase-storage-compat.js"></script>
+</head>
+
+<body>
+  <h1>Firebase Emulator & Storage Test</h1>
+
+  <div>
+    <h3>Emulator Connection</h3>
+    <div id="emulator-status"></div>
+    <p>
+      <a href="?useEmulator=true">Set ?useEmulator=true</a> |
+      <a href="?useEmulator=false">Set ?useEmulator=false</a>
+    </p>
+  </div>
+
+  <div>
+    <h3>Firebase Config</h3>
+    <textarea id="firebase-config" rows="12" cols="80">
+      REPLACE THIS WITH YOUR FIREBASE JSON CONFIG
+    </textarea>
+  </div>
+
+  <div>
+    <h3>Initialize</h3>
+    <button id="btn-init">Initialize Firebase</button>
+    <div id="init-status"></div>
+  </div>
+
+  <div>
+    <h3>Seed Data</h3>
+    <button id="btn-seed">Seed Data</button>
+    <div id="seed-status"></div>
+  </div>
+
+  <div>
+    <h3>Read File in Storage</h3>
+    <button id="btn-read-storage">Read Storage File</button>
+    <div id="storage-response-container">
+      <h4>Response:</h4>
+      <pre id="storage-response"></pre>
+    </div>
+  </div>
+
+  <script>
+    function loadScript(src) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    async function ensureFirebaseLoaded() {
+      if (typeof firebase === 'undefined') {
+        await loadScript('https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js');
+      }
+      if (typeof firebase.firestore !== 'function') {
+        await loadScript('https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js');
+      }
+      if (typeof firebase.storage !== 'function') {
+        await loadScript('https://www.gstatic.com/firebasejs/12.19.0/firebase-storage-compat.js');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var urlParams = new URLSearchParams(window.location.search);
+      var useEmulatorParam = urlParams.get('useEmulator');
+      var useEmulator = useEmulatorParam === 'true';
+
+      var emulatorStatusEl = document.getElementById('emulator-status');
+      if (useEmulatorParam === null) {
+        emulatorStatusEl.textContent = 'useEmulator is not set in URL. Emulators will not be connected by default. (Use ?useEmulator=true to connect)';
+      } else if (useEmulator) {
+        emulatorStatusEl.textContent = 'useEmulator=true detected: Emulators will be connected upon initialization';
+      } else {
+        emulatorStatusEl.textContent = 'useEmulator=false detected: Emulators will not be connected (live Firebase)';
+      }
+
+      document.getElementById('btn-init').addEventListener('click', async function () {
+        var initStatusEl = document.getElementById('init-status');
+        try {
+          initStatusEl.textContent = 'Initializing Firebase...';
+          await ensureFirebaseLoaded();
+
+          var configText = document.getElementById('firebase-config').value.trim();
+          var config;
+          try {
+            config = JSON.parse(configText);
+          } catch (e) {
+            config = new Function('return (' + configText + ')')();
+          }
+
+          if (firebase.apps.length > 0) {
+            await Promise.all(firebase.apps.map(function (app) { return app.delete(); }));
+          }
+
+          var app = firebase.initializeApp(config);
+          var db = firebase.firestore(app);
+          var storage = firebase.storage(app);
+
+          if (useEmulator) {
+            db.useEmulator('127.0.0.1', 8080);
+            storage.useEmulator('127.0.0.1', 9199);
+            initStatusEl.textContent = 'Firebase initialized with Emulators (Firestore: 127.0.0.1:8080, Storage: 127.0.0.1:9199)';
+          } else {
+            initStatusEl.textContent = 'Firebase initialized in live mode (no emulators)';
+          }
+        } catch (error) {
+          console.error('Initialization error:', error);
+          initStatusEl.textContent = 'Initialization error: ' + (error.message || error);
+        }
+      });
+
+      document.getElementById('btn-seed').addEventListener('click', async function () {
+        var seedStatusEl = document.getElementById('seed-status');
+        try {
+          if (typeof firebase === 'undefined' || firebase.apps.length === 0) {
+            seedStatusEl.textContent = 'Error: Firebase not initialized. Click "Initialize Firebase" first.';
+            return;
+          }
+          seedStatusEl.textContent = 'Seeding data...';
+          var db = firebase.firestore();
+          await db.collection('users').doc('11167').set({
+            name: 'John Doe'
+          });
+          await db.collection('user-levels').doc('11167').set({
+            user_level: 49
+          });
+          await db.collection('user-status').doc('11167').set({
+            is_active: true
+          });
+          console.log('Done');
+          seedStatusEl.textContent = 'Done. Seeded users/11167, user-levels/11167, user-status/11167.';
+        } catch (error) {
+          console.error('Error: ', error);
+          seedStatusEl.textContent = 'Error: ' + (error.message || error);
+        }
+      });
+
+      document.getElementById('btn-read-storage').addEventListener('click', async function () {
+        var storageResponseEl = document.getElementById('storage-response');
+        try {
+          if (typeof firebase === 'undefined' || firebase.apps.length === 0) {
+            storageResponseEl.textContent = 'Error: Firebase not initialized. Click "Initialize Firebase" first.';
+            return;
+          }
+          storageResponseEl.textContent = 'Reading storage file...';
+          var storage = firebase.storage();
+          var fileRef = storage.ref('users/11167');
+          var fileData = await fileRef.getMetadata();
+          console.log('File data: ', fileData);
+          storageResponseEl.textContent = JSON.stringify(fileData, null, 2);
+        } catch (error) {
+          console.error('Error: ', error);
+          storageResponseEl.textContent = 'Error: ' + (error.message || error);
+        }
+      });
+    });
+  </script>
+</body>
+
+</html>
